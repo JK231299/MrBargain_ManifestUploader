@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mr Bargain · Manifest to Hike</title>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+<style>
+  :root{
+    --ink:#141210; --paper:#f5f2ec; --panel:#fffdf8; --line:#dcd5c8;
+    --accent:#1f5c4d; --accent-ink:#0f3a30; --amber:#c8781e; --amber-soft:#f4e6d2;
+    --shoe:#b23a48; --muted:#6f685c; --ok:#1f5c4d; --err:#a33028; --err-soft:#f6e2de;
+    --shadow:0 1px 0 var(--line),0 2px 8px rgba(20,18,16,.05);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    background:var(--paper);color:var(--ink);line-height:1.5;
+    -webkit-font-smoothing:antialiased;padding:0 16px 80px;
+  }
+  .wrap{max-width:760px;margin:0 auto}
+  header{
+    display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+    padding:26px 0 18px;border-bottom:2px solid var(--ink);margin-bottom:28px;
+  }
+  .logo{font-weight:700;font-size:1.15rem;letter-spacing:-.02em}
+  .logo b{color:var(--amber)}
+  .tag{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}
+  .spacer{flex:1}
+  .stepdot{font-size:.7rem;color:var(--muted);letter-spacing:.1em}
+
+  h1{font-size:1.5rem;letter-spacing:-.02em;margin-bottom:6px;font-weight:700}
+  .lead{color:var(--muted);font-size:.9rem;margin-bottom:24px;max-width:52ch}
+
+  .panel{
+    background:var(--panel);border:1px solid var(--line);border-radius:2px;
+    box-shadow:var(--shadow);padding:22px;margin-bottom:18px;
+  }
+  .eyebrow{
+    font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    margin-bottom:14px;display:flex;align-items:center;gap:8px;
+  }
+  .eyebrow::before{content:"";width:18px;height:2px;background:var(--amber)}
+
+  /* source choice */
+  .sources{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:520px){.sources{grid-template-columns:1fr}}
+  .srcbtn{
+    text-align:left;cursor:pointer;background:var(--panel);border:1.5px solid var(--line);
+    border-radius:2px;padding:20px;transition:.12s;font-family:inherit;color:inherit;
+  }
+  .srcbtn:hover{border-color:var(--ink);transform:translateY(-2px)}
+  .srcbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .srcbtn.on{border-color:var(--accent);background:#f0f6f3;box-shadow:inset 0 0 0 1px var(--accent)}
+  .srcname{font-size:1.15rem;font-weight:700;letter-spacing:-.01em;margin-bottom:4px}
+  .srcdesc{font-size:.78rem;color:var(--muted)}
+  .srcbtn .mark{font-size:.7rem;color:var(--accent);font-weight:700;opacity:0;margin-top:10px}
+  .srcbtn.on .mark{opacity:1}
+
+  label.fld{display:block;margin-bottom:16px}
+  .fldname{font-size:.8rem;font-weight:700;margin-bottom:6px;display:block}
+  .fldhint{font-size:.72rem;color:var(--muted);font-weight:400}
+  select,input[type=text]{
+    width:100%;font-family:inherit;font-size:.92rem;padding:11px 12px;
+    border:1.5px solid var(--line);border-radius:2px;background:#fff;color:var(--ink);
+  }
+  select:focus,input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+
+  .drop{
+    border:1.5px dashed var(--line);border-radius:2px;padding:26px;text-align:center;
+    cursor:pointer;transition:.12s;background:#fff;
+  }
+  .drop:hover,.drop.over{border-color:var(--accent);background:#f0f6f3}
+  .drop input{display:none}
+  .drop .big{font-weight:700;font-size:.95rem;margin-bottom:4px}
+  .drop .sub{font-size:.76rem;color:var(--muted)}
+  .filechip{
+    display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 12px;
+    background:var(--amber-soft);border:1px solid #e6cfa8;border-radius:2px;font-size:.82rem;
+  }
+  .filechip b{font-weight:700}
+  .filechip .x{margin-left:auto;cursor:pointer;color:var(--muted);border:none;background:none;font-family:inherit;font-size:1rem}
+
+  .btn{
+    font-family:inherit;font-size:.92rem;font-weight:700;cursor:pointer;
+    padding:13px 22px;border-radius:2px;border:1.5px solid var(--accent-ink);
+    background:var(--accent);color:#fff;transition:.12s;letter-spacing:.01em;
+  }
+  .btn:hover{background:var(--accent-ink)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+  .btn.ghost:hover{border-color:var(--ink);background:transparent}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:6px}
+
+  .hidden{display:none!important}
+
+  /* status */
+  .status{font-size:.84rem;display:flex;align-items:center;gap:10px;padding:14px 16px;border-radius:2px;margin-top:4px}
+  .status.work{background:#eef4f1;border:1px solid #cfe0d8;color:var(--accent-ink)}
+  .status.done{background:#eef4f1;border:1px solid #bcd6cb;color:var(--accent-ink)}
+  .status.fail{background:var(--err-soft);border:1px solid #e6c3bd;color:var(--err)}
+  .spin{width:14px;height:14px;border:2px solid #cfe0d8;border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;flex:none}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  /* stats */
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:2px;overflow:hidden;margin:6px 0 16px}
+  @media(max-width:520px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .stat{background:var(--panel);padding:14px}
+  .stat .n{font-size:1.5rem;font-weight:700;letter-spacing:-.02em}
+  .stat .l{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-top:2px}
+  .stat.warn .n{color:var(--amber)}
+
+  .tblwrap{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:2px;margin:6px 0 4px}
+  table{border-collapse:collapse;font-size:.74rem;width:100%}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);white-space:nowrap;max-width:230px;overflow:hidden;text-overflow:ellipsis}
+  th{position:sticky;top:0;background:var(--amber-soft);font-weight:700;z-index:1}
+  tr:hover td{background:#faf7f0}
+
+  .note{font-size:.75rem;color:var(--muted);margin-top:10px}
+  .warnline{font-size:.78rem;color:var(--amber);margin-top:10px;padding:10px 12px;background:var(--amber-soft);border-radius:2px;border:1px solid #e6cfa8}
+  footer{text-align:center;font-size:.7rem;color:var(--muted);margin-top:30px;letter-spacing:.05em}
+  .stepnum{color:var(--amber);font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="logo">Mr <b>Bargain</b></span>
+    <span class="tag">Manifest → Hike</span>
+    <span class="spacer"></span>
+    <span class="stepdot" id="stepdot">Loading engine…</span>
+  </header>
+
+  <h1>Turn a supplier manifest into a Hike import file.</h1>
+  <p class="lead">Pick the supplier, upload the manifest, choose your options, and download a file ready to import into Hike. No spreadsheets to touch.</p>
+
+  <!-- STEP 1 : SOURCE -->
+  <section class="panel" id="p-source">
+    <span class="eyebrow"><span class="stepnum">01</span> Where's the manifest from?</span>
+    <div class="sources">
+      <button class="srcbtn" data-src="costco" id="btn-costco">
+        <div class="srcname">Costco</div>
+        <div class="srcdesc">Casuarina / Perth manifest with a Details sheet and Costco Category (CK / CL / GM).</div>
+        <div class="mark">● Selected</div>
+      </button>
+      <button class="srcbtn" data-src="amazon" id="btn-amazon">
+        <div class="srcname">Amazon</div>
+        <div class="srcdesc">AMZ manifest with GLDesc, ASIN, EAN and per-unit rows to group.</div>
+        <div class="mark">● Selected</div>
+      </button>
+    </div>
+  </section>
+
+  <!-- STEP 2 : UPLOAD -->
+  <section class="panel hidden" id="p-upload">
+    <span class="eyebrow"><span class="stepnum">02</span> Upload the manifest</span>
+    <div class="drop" id="drop">
+      <input type="file" id="file" accept=".xlsx,.xls">
+      <div class="big">Drop the .xlsx here or tap to browse</div>
+      <div class="sub">The file stays in your browser — nothing is uploaded anywhere.</div>
+    </div>
+    <div id="filechip"></div>
+  </section>
+
+  <!-- STEP 3 : OPTIONS -->
+  <section class="panel hidden" id="p-options">
+    <span class="eyebrow"><span class="stepnum">03</span> Options</span>
+    <div id="opt-costco" class="hidden">
+      <label class="fld">
+        <span class="fldname">SKU date suffix <span class="fldhint">— added after the Item #, e.g. 150826</span></span>
+        <input type="text" id="c-suffix" placeholder="150826" inputmode="numeric">
+      </label>
+    </div>
+    <div id="opt-amazon" class="hidden">
+      <label class="fld">
+        <span class="fldname">Supplier</span>
+        <select id="a-supplier">
+          <option>Amazon Perth</option>
+          <option>Amazon Melbourne</option>
+          <option>Amazon Sydney</option>
+          <option value="__other">Other (type below)</option>
+        </select>
+      </label>
+      <label class="fld hidden" id="a-other-wrap">
+        <span class="fldname">Custom supplier name</span>
+        <input type="text" id="a-other" placeholder="Supplier name">
+      </label>
+      <label class="fld">
+        <span class="fldname">SKU / barcode source</span>
+        <select id="a-prefix">
+          <option value="ASIN">ASIN — group duplicate items, sum quantity</option>
+          <option value="LPN">LPN — no grouping, one row per unit</option>
+          <option value="Randomly generate">Random code — group by ASIN</option>
+        </select>
+      </label>
+      <label class="fld" id="a-ship-wrap">
+        <span class="fldname">Shipment <span class="fldhint">— only affects Melbourne / Sydney cost</span></span>
+        <select id="a-shipment"><option>Container</option><option>Pallets</option></select>
+      </label>
+      <label class="fld">
+        <span class="fldname">SKU suffix <span class="fldhint">— added after the code, e.g. 240626</span></span>
+        <input type="text" id="a-suffix" placeholder="240626" inputmode="numeric">
+      </label>
+    </div>
+    <div class="row">
+      <button class="btn" id="run" disabled>Build Hike file</button>
+      <button class="btn ghost" id="reset">Start over</button>
+    </div>
+    <div id="status"></div>
+  </section>
+
+  <!-- STEP 4 : RESULT -->
+  <section class="panel hidden" id="p-result">
+    <span class="eyebrow"><span class="stepnum">04</span> Result</span>
+    <div id="stats" class="stats"></div>
+    <div id="warn"></div>
+    <div class="tblwrap"><table id="preview"></table></div>
+    <p class="note">Preview shows the first 8 rows of the key columns. The download has all rows and all 60 Hike columns.</p>
+    <div class="row">
+      <button class="btn" id="download">Download Hike file</button>
+      <button class="btn ghost" id="again">Do another</button>
+    </div>
+  </section>
+
+  <footer>Runs entirely in your browser · Mr Bargain internal tool</footer>
+</div>
+
+<script id="pycode" type="text/python">
+import pandas as pd, numpy as np, re, random, string, io, json
+
+TEMPLATE_COLS = ["Name","Description","SKU","Barcode","Product type","Product tag","Brand name","Season name","Supplier code","Supplier name","Sales code","Purchase code","Loyalty","Visible eCommerce","Depth","Width","Height","Weight","Specification","Enable SEO","Meta title","Meta description","Meta keywords","Slug","Track inventory","Allow out of stock","Is variant product","Same retail price for all outlets","Variant option name one","Variant option value one","Variant option name two","Variant option value two","Variant option name three","Variant option value three","Image URL","Active","Custom field","Enable Serial Number","Component part - not sold individually","Exclude from all discount","Exclude additional loyalty","Age verification needed for buy this product","Age verification limit","Enable unit of measure","Is composite product","Exclude from reorder","Composite product1_SKU","Composite product1_Quantity","Composite product2_SKU","Composite product2_Quantity","Cannington Store_Tax","Cannington Store_Cost price","Cannington Store_Retail price","Cannington Store_Stock","Cannington Store_Stock on hand","Cannington Store_Reorder level","Cannington Store_Reorder value","Cannington Store_Price Excluding Tax","Cannington Store_Outlet visibility","Handle"]
+
+BOOL_TRUE = ["Track inventory","Active","Same retail price for all outlets","Cannington Store_Outlet visibility"]
+BOOL_FALSE = ["Visible eCommerce","Enable SEO","Allow out of stock","Is variant product","Enable Serial Number","Component part - not sold individually","Exclude from all discount","Exclude additional loyalty","Age verification needed for buy this product","Enable unit of measure","Is composite product","Exclude from reorder"]
+
+def _rand(k=10):
+    return "".join(random.choices(string.ascii_uppercase+string.digits,k=k))
+
+def slugify(n):
+    return re.sub(r"-+","-",re.sub(r"[^a-z0-9]+","-",str(n).lower())).strip("-")
+
+def finalize(out):
+    out["Loyalty"]=0
+    for c in BOOL_TRUE: out[c]=True
+    for c in BOOL_FALSE: out[c]=False
+    return out.reindex(columns=TEMPLATE_COLS)
+
+# ---------- product type / gender / size (Amazon) ----------
+def product_type_from_gldesc(gl):
+    if not isinstance(gl,str): return "UNKNOWN"
+    g=gl.strip().lower()
+    if g=="gl_shoes": return "Shoes"
+    if g=="gl_apparel": return "Clothes"
+    rest=re.sub(r"^gl_","",g).replace("_"," ").strip()
+    return rest.title() if rest else "UNKNOWN"
+
+def categorize_gender(desc):
+    if not isinstance(desc,str): return "UNKNOWN"
+    d=desc.lower()
+    has_men=bool(re.search(r"\bmen['\u2019]?s\b|\bmens\b|\bmen\b",d))
+    has_women=bool(re.search(r"\bwomen['\u2019]?s\b|\bwomens\b|\bwomen\b|\bladies\b",d))
+    has_boy=bool(re.search(r"\bboy['\u2019]?s?\b",d))
+    has_girl=bool(re.search(r"\bgirl['\u2019]?s?\b",d))
+    has_kid=bool(re.search(r"\bkid['\u2019]?s?\b|\btoddler\b|\bbaby\b|\binfant\b|\blittle kid\b|\bbig kid\b|\bjunior\b|\bchildren['\u2019]?s?\b|\bchild\b",d))
+    has_unisex=bool(re.search(r"\bunisex\b|men and women|men & women|for men and women",d))
+    tail=re.split(r",",desc)[-1].strip()
+    kid_code=bool(re.match(r"[CJ]\d",tail,re.I)) or bool(re.search(r"\d+K\b",tail))
+    if has_boy and not has_girl: return "Boys"
+    if has_girl and not has_boy: return "Girls"
+    if has_boy and has_girl: return "Kids"
+    if has_unisex: return "Unisex"
+    if has_men and has_women: return "Unisex"
+    if has_women: return "Women"
+    if has_men: return "Men"
+    if has_kid or kid_code: return "Kids"
+    return "UNKNOWN"
+
+def extract_shoe_size(desc):
+    if not isinstance(desc,str): return "UNKNOWN"
+    d=desc; last=re.split(r",",d)[-1].strip()
+    m=re.search(r"US\s*M(\d+\.?\d*)\s*/?\s*W(\d+\.?\d*)",d,re.I)
+    if m: return f"M{m.group(1)} / W{m.group(2)} US"
+    m=re.search(r"(\d+\.?\d*)\s*US\s*Wom[ae]ns?/(\d+\.?\d*)\s*US\s*M[ae]ns?",d,re.I)
+    if m: return f"W{m.group(1)} / M{m.group(2)} US"
+    m=re.search(r"US\s*W(\d+\.?\d*)",d,re.I)
+    if m: return f"W{m.group(1)} US"
+    m=re.search(r"US\s*M(\d+\.?\d*)",d,re.I)
+    if m: return f"M{m.group(1)} US"
+    m=re.search(r"(\d+\.?\d*)\s*M\s*US\b",d,re.I)
+    if m: return f"{m.group(1)} US"
+    m=re.search(r"(\d+\.?\d*)\s*US\s*(Little Kid|Big Kid|Infant|Toddler)",d,re.I)
+    if m: return f"{m.group(1)} US {m.group(2).title()}"
+    m=re.search(r"(\d+\.?\d*)\s*(Little Kid|Big Kid|Infant|Toddler)",d,re.I)
+    if m: return f"{m.group(1)} US {m.group(2).title()}"
+    m=re.search(r"US\s*(\d+\.?\d*(?:\s*[-\u2013]\s*\d+\.?\d*)?)",d,re.I)
+    if m: return f'{m.group(1).replace(" ","")} US'
+    m=re.search(r"(\d+\.?\d*)\s*US\b",d,re.I)
+    if m: return f"{m.group(1)} US"
+    m=re.search(r"\bSize\s*(\d+\.?\d*)",d,re.I)
+    if m: return f"{m.group(1)} US"
+    m=re.search(r"Numeric[_ ](\d+\.?\d*)",d,re.I)
+    if m: return f"{m.group(1)} US"
+    m=re.fullmatch(r"([CJ]\d+\.?\d*)",last,re.I)
+    if m: return m.group(1).upper()
+    m=re.search(r"\b(\d+\.?\d*K)\b",last,re.I)
+    if m: return m.group(1).upper()
+    m=re.fullmatch(r"(\d+\.?\d*)",last)
+    if m: return f"{m.group(1)} US"
+    m=re.search(r"\b(\d+\.?\d*)\s+[A-Z][a-z]+$",last)
+    if m: return f"{m.group(1)} US"
+    if re.search(r"\bOne Size\b|\bO/?S\b",last,re.I): return "ONE SIZE"
+    return "UNKNOWN"
+
+def extract_apparel_size(description):
+    if not isinstance(description,str): return "UNKNOWN"
+    last=re.split(r",|\s-\s",description)[-1].strip()
+    lc=re.sub(r"\(.*?\)","",last).strip()
+    m=re.search(r"\bSize\s+([\d.]+(?:\s*[-\u2013]\s*[\d.]+)?)",last,re.I)
+    if m: return m.group(1).replace(" ","")
+    m=re.search(r"(\d+)\s*W\s*x\s*(\d+)\s*L",lc,re.I)
+    if m: return f"{m.group(1)}W x {m.group(2)}L".upper()
+    m=re.fullmatch(r"(\d+)\s*[xX]\s*(\d+)",lc)
+    if m: return f"{m.group(1)}x{m.group(2)}"
+    m=re.fullmatch(r"(\d+)\s*([A-K]{1,3})",lc,re.I)
+    if m: return f"{m.group(1)}{m.group(2).upper()}"
+    m=re.fullmatch(r"(\d)X",lc,re.I)
+    if m: return f"{m.group(1)}XL"
+    m=re.fullmatch(r"(\d)XL",lc,re.I)
+    if m: return lc.upper()
+    m=re.fullmatch(r"(\d+)\s*(Regular|Reg|Slim|R|REG)",lc,re.I)
+    if m: return m.group(1)
+    if re.fullmatch(r"\d+T",lc,re.I): return lc.upper()
+    ordered=[(r"\bXXX[\s-]?Large\b|\b3XL\b|\bXXXL\b","XXXLarge"),(r"\bXX[\s-]?Large\b|\b2XL\b|\bXXL\b","XXLarge"),(r"\bX[\s-]?Large\b|\bXL\b","XLarge"),(r"\bXX[\s-]?Small\b|\bXXS\b","XXSmall"),(r"\bX[\s-]?Small\b|\bXS\b","XSmall"),(r"\bOne Size\b|\bOSFA\b|\bOS\b","ONE SIZE"),(r"\bLarge\b|\bL\b","Large"),(r"\bMedium\b|\bMED\b|\bM\b","Medium"),(r"\bSmall\b|\bS\b","Small")]
+    for text in (lc,description):
+        for pat,label in ordered:
+            if re.search(pat,text,re.I): return label
+    if re.fullmatch(r"\d+(\.\d+)?",lc): return lc
+    if re.fullmatch(r"\d+\s*[-\u2013]\s*\d+\+?",lc): return lc.replace(" ","")
+    if re.fullmatch(r"\d+\+",lc): return lc
+    return "UNKNOWN"
+
+def build_tags(row,supplier,suffix):
+    ptype=product_type_from_gldesc(row["GLDesc"]); desc=row["ItemDesc"]
+    tags=[f"{supplier} {suffix}"]
+    if ptype in ("Shoes","Clothes"):
+        gender=categorize_gender(desc)
+        size=extract_shoe_size(desc) if ptype=="Shoes" else extract_apparel_size(desc)
+        tags += [f"{ptype} {suffix}",f"{ptype} {suffix} {size}",f"{ptype} {suffix} {gender}",f"{ptype} {suffix} {gender} {size}"]
+    else:
+        tags.append(f"{ptype} {suffix}")
+    seen=set(); clean=[]
+    for t in tags:
+        t=re.sub(r"\s+"," ",t).strip()
+        if t and t not in seen: seen.add(t); clean.append(t)
+    return clean
+
+def pick_sheet(xls, needed):
+    names=xls.sheet_names
+    if "Details" in names:
+        return "Details"
+    for s in names:
+        low=s.lower()
+        if "test" in low or (low.startswith("detail") and low!="details"): continue
+        cols=set(pd.read_excel(xls,sheet_name=s,nrows=0).columns)
+        if needed.issubset(cols): return s
+    raise ValueError("Couldn't find a data sheet with the expected columns. Sheets: "+", ".join(names))
+
+# =================== COSTCO ===================
+def run_costco(file_bytes, suffix):
+    xls=pd.ExcelFile(io.BytesIO(file_bytes))
+    sheet=pick_sheet(xls,{"Item #","Item Description","Quantity","Sell Value"})
+    df=pd.read_excel(xls,sheet_name=sheet)
+    df.columns=df.columns.str.strip()
+    if "Docket #" in df.columns:
+        df=df.drop(columns=["Docket #"])
+    agg={"Date":"first","Costco Supplier":"first","Label #":"first","Item Description":"first","Quantity":"sum","Sell Value":"sum","Number of Pallets":"first"}
+    if "Costco Category" in df.columns: agg["Costco Category"]="first"
+    agg={k:v for k,v in agg.items() if k in df.columns or k in ("Quantity","Sell Value")}
+    g=df.groupby("Item #",as_index=False).agg(agg)
+
+    g["Sell Value per Qty"]=g["Sell Value"]/g["Quantity"]
+    base=g["Sell Value per Qty"]*1.10
+    if "Costco Category" in g.columns:
+        cat=g["Costco Category"].astype(str).str.upper()
+        rate=np.select([cat=="CL",cat=="CK"],[0.16,0.18],default=0.21)
+    else:
+        rate=0.21
+    g["Final Cost"]=base*rate*1.20
+    g["Retail Price"]=g["Sell Value per Qty"]*1.10*0.60
+
+    used=set()
+    def bc():
+        while True:
+            b=_rand(10)
+            if b not in used: used.add(b); return b
+
+    out=pd.DataFrame()
+    out["Name"]=g["Item Description"]
+    out["SKU"]=g["Item #"].astype(str)+"-"+suffix
+    out["Barcode"]=[bc() for _ in range(len(g))]
+    if "Costco Category" in g.columns: out["Product type"]=g["Costco Category"]
+    supplier=g["Costco Supplier"].iloc[0] if "Costco Supplier" in g.columns and len(g) else "Costco"
+    out["Product tag"]=(g["Costco Supplier"] if "Costco Supplier" in g.columns else supplier).astype(str)+"; "+suffix
+    out["Supplier name"]=supplier
+    out["Slug"]=g["Item Description"].apply(slugify)
+    out["Cannington Store_Tax"]="GST"
+    out["Cannington Store_Cost price"]=g["Final Cost"]
+    out["Cannington Store_Retail price"]=g["Retail Price"]
+    out["Cannington Store_Stock"]=g["Quantity"]
+    out["Cannington Store_Stock on hand"]=g["Quantity"]
+    out["Cannington Store_Price Excluding Tax"]=g["Retail Price"]*0.90
+    final=finalize(out)
+    stats={"Rows in":int(len(df)),"Products out":int(len(final)),"Grouped":int(len(df)-len(final))}
+    return final, stats, []
+
+# =================== AMAZON ===================
+def run_amazon(file_bytes, supplier, prefix_choice, shipment, suffix):
+    xls=pd.ExcelFile(io.BytesIO(file_bytes))
+    sheet=pick_sheet(xls,{"GLDesc","ItemDesc","Units","MerchandiseCost"})
+    df=pd.read_excel(xls,sheet_name=sheet)
+    warns=[]
+    rows_in=len(df)
+
+    if prefix_choice=="LPN":
+        lpn=df["LPN"].astype(str).str.strip() if "LPN" in df.columns else pd.Series(["nan"]*len(df))
+        nblank=int(lpn.isin(["","nan"]).sum())
+        if nblank:
+            warns.append(f"{nblank} of {rows_in} rows have a blank LPN — those get a random code. Use ASIN unless every LPN is filled.")
+    else:
+        agg={"Unnamed: 0":"first","GLDesc":"first","UPC":"first","EAN":"first","FCSku":"first","ItemDesc":"first","Units":"sum","MerchandiseCost":"first","LPN":"first"}
+        agg={k:v for k,v in agg.items() if k in df.columns}
+        df=df.groupby("Asin",as_index=False).agg(agg)
+
+    # SKU prefix
+    def fill(series,*fbs):
+        s=series.astype(str).str.strip(); blank=s.isin(["","nan"])
+        for fb in fbs:
+            if not blank.any(): break
+            s=s.mask(blank,fb.astype(str).str.strip()); blank=s.isin(["","nan"])
+        if blank.any():
+            usd=set(s[~blank]); fills=[]
+            for _ in range(int(blank.sum())):
+                c=_rand(10)
+                while c in usd: c=_rand(10)
+                usd.add(c); fills.append(c)
+            s.loc[blank]=fills
+        return s
+    if prefix_choice=="ASIN":
+        prefix=fill(df["Asin"],df["EAN"]) if "EAN" in df.columns else fill(df["Asin"])
+    elif prefix_choice=="LPN":
+        prefix=fill(df["LPN"]) if "LPN" in df.columns else fill(pd.Series(["nan"]*len(df)))
+    else:
+        usd=set(); vals=[]
+        for _ in range(len(df)):
+            c=_rand(10)
+            while c in usd: c=_rand(10)
+            usd.add(c); vals.append(c)
+        prefix=pd.Series(vals,index=df.index)
+    df["SKU"]=prefix.values+"-"+suffix
+
+    # tags
+    df["Product tag"]=df.apply(lambda r:";".join(build_tags(r,supplier,suffix)),axis=1)
+
+    # pricing
+    base=df["MerchandiseCost"]*1.10
+    cond=df["Unnamed: 0"].astype(str).str.strip().str.lower() if "Unnamed: 0" in df.columns else pd.Series([""]*len(df))
+    rate=np.where(cond=="overstock",0.28,0.24)
+    cost=base*rate*1.20
+    add=0.0
+    if supplier in ("Amazon Melbourne","Amazon Sydney"):
+        add=1.50 if shipment=="Container" else 2.50
+    df["Final Cost"]=cost+add
+    df["Retail Price"]=df["MerchandiseCost"]*1.10*0.70
+
+    # barcode source
+    usedbc=set()
+    def bc(v):
+        v="" if pd.isna(v) else str(v).strip()
+        if v and v.lower()!="nan": return v
+        while True:
+            b=_rand(12)
+            if b not in usedbc: usedbc.add(b); return b
+    if prefix_choice=="LPN" and "LPN" in df.columns:
+        bcs=df["LPN"]
+    elif "EAN" in df.columns:
+        bcs=df["EAN"]
+    else:
+        bcs=pd.Series([None]*len(df))
+
+    out=pd.DataFrame()
+    out["Name"]=df["ItemDesc"]
+    out["SKU"]=df["SKU"]
+    out["Barcode"]=bcs.apply(bc)
+    out["Product type"]=df["GLDesc"].apply(product_type_from_gldesc)
+    out["Product tag"]=df["Product tag"]
+    out["Supplier name"]=supplier
+    out["Slug"]=df["ItemDesc"].apply(slugify)
+    out["Cannington Store_Tax"]="GST"
+    out["Cannington Store_Cost price"]=df["Final Cost"]
+    out["Cannington Store_Retail price"]=df["Retail Price"]
+    out["Cannington Store_Stock"]=df["Units"]
+    out["Cannington Store_Stock on hand"]=df["Units"]
+    out["Cannington Store_Price Excluding Tax"]=df["Retail Price"]*0.90
+    final=finalize(out)
+
+    dup=int(final["SKU"].duplicated().sum())
+    if dup: warns.append(f"{dup} duplicate SKUs — Hike may reject these. Check the source choice.")
+    stats={"Rows in":int(rows_in),"Products out":int(len(final)),"Grouped":int(rows_in-len(final))}
+    return final, stats, warns
+
+# Called from JS
+def process(source, file_bytes, opts):
+    opts=json.loads(opts)
+    file_bytes=bytes(file_bytes)
+    if source=="costco":
+        final,stats,warns=run_costco(file_bytes,opts["suffix"])
+    else:
+        final,stats,warns=run_amazon(file_bytes,opts["supplier"],opts["prefix"],opts["shipment"],opts["suffix"])
+    # preview: key cols, first 8 rows
+    keycols=["Name","SKU","Barcode","Product type","Product tag","Cannington Store_Cost price","Cannington Store_Retail price","Cannington Store_Stock on hand"]
+    prev=final[keycols].head(8).fillna("").astype(str)
+    preview={"cols":keycols,"rows":prev.values.tolist()}
+    # excel bytes
+    buf=io.BytesIO()
+    final.to_excel(buf,index=False)
+    return json.dumps({"stats":stats,"warns":warns,"preview":preview}), buf.getvalue()
+</script>
+
+<script>
+let pyodide=null, ready=false, source=null, fileBytes=null, fileName="", resultBytes=null, resultName="";
+const $=id=>document.getElementById(id);
+const stepdot=$("stepdot");
+
+async function boot(){
+  try{
+    stepdot.textContent="Loading engine…";
+    pyodide=await loadPyodide();
+    stepdot.textContent="Loading tools…";
+    await pyodide.loadPackage(["pandas","numpy","micropip"]);
+    await pyodide.runPythonAsync(`
+import micropip
+await micropip.install("openpyxl")
+`);
+    pyodide.runPython($("pycode").textContent);
+    ready=true;
+    stepdot.textContent="Ready";
+    maybeEnableRun();
+  }catch(e){
+    stepdot.textContent="Engine failed to load";
+    setStatus("fail","Couldn't start the engine. Check your connection and refresh. ("+e.message+")");
+  }
+}
+boot();
+
+// STEP 1 — source
+document.querySelectorAll(".srcbtn").forEach(b=>{
+  b.addEventListener("click",()=>{
+    source=b.dataset.src;
+    $("btn-costco").classList.toggle("on",source==="costco");
+    $("btn-amazon").classList.toggle("on",source==="amazon");
+    $("p-upload").classList.remove("hidden");
+    $("p-options").classList.remove("hidden");
+    $("opt-costco").classList.toggle("hidden",source!=="costco");
+    $("opt-amazon").classList.toggle("hidden",source!=="amazon");
+    $("p-result").classList.add("hidden");
+    maybeEnableRun();
+  });
+});
+
+// STEP 2 — upload
+const drop=$("drop"), fileInput=$("file");
+drop.addEventListener("click",()=>fileInput.click());
+drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("over")});
+drop.addEventListener("dragleave",()=>drop.classList.remove("over"));
+drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("over");if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0])});
+fileInput.addEventListener("change",e=>{if(e.target.files[0])loadFile(e.target.files[0])});
+
+async function loadFile(f){
+  fileName=f.name;
+  const buf=await f.arrayBuffer();
+  fileBytes=new Uint8Array(buf);
+  $("filechip").innerHTML=`<div class="filechip"><b>${fileName}</b> · ${(f.size/1024).toFixed(0)} KB<button class="x" title="Remove">✕</button></div>`;
+  $("filechip").querySelector(".x").addEventListener("click",()=>{fileBytes=null;fileName="";$("filechip").innerHTML="";maybeEnableRun();});
+  maybeEnableRun();
+}
+
+// Amazon option interactivity
+$("a-supplier").addEventListener("change",e=>{
+  $("a-other-wrap").classList.toggle("hidden",e.target.value!=="__other");
+});
+
+function maybeEnableRun(){
+  $("run").disabled=!(ready&&source&&fileBytes);
+}
+
+// STEP 3 — run
+$("run").addEventListener("click",runProcess);
+$("reset").addEventListener("click",resetAll);
+$("again").addEventListener("click",()=>{$("p-result").classList.add("hidden");window.scrollTo({top:0,behavior:"smooth"});});
+
+function gatherOpts(){
+  if(source==="costco"){
+    return {suffix:($("c-suffix").value||"").trim()};
+  }
+  let sup=$("a-supplier").value;
+  if(sup==="__other") sup=($("a-other").value||"").trim()||"Other";
+  return {supplier:sup,prefix:$("a-prefix").value,shipment:$("a-shipment").value,suffix:($("a-suffix").value||"").trim()};
+}
+
+async function runProcess(){
+  const opts=gatherOpts();
+  if(!opts.suffix){ setStatus("fail","Enter a SKU suffix first (the date)."); return; }
+  setStatus("work","Building the Hike file… large manifests take a few seconds.");
+  $("run").disabled=true;
+  try{
+    pyodide.globals.set("_src",source);
+    pyodide.globals.set("_bytes",fileBytes);
+    pyodide.globals.set("_opts",JSON.stringify(opts));
+    const res=await pyodide.runPythonAsync(`process(_src,_bytes,_opts)`);
+    const meta=JSON.parse(res.get(0));
+    const xbytes=res.get(1).toJs();
+    res.destroy();
+    resultBytes=xbytes;
+    resultName=(source==="costco"?"Costco":"AMZ")+"_Hike_Import_"+opts.suffix+".xlsx";
+    showResult(meta);
+    setStatus("done","Done — "+meta.stats["Products out"]+" products ready.");
+  }catch(e){
+    setStatus("fail","Something went wrong: "+(e.message||e));
+  }finally{
+    $("run").disabled=false;
+  }
+}
+
+function showResult(meta){
+  const s=meta.stats;
+  $("stats").innerHTML=Object.entries(s).map(([k,v])=>
+    `<div class="stat ${k==='Grouped'&&v>0?'':''}"><div class="n">${v.toLocaleString()}</div><div class="l">${k}</div></div>`
+  ).join("");
+  $("warn").innerHTML=(meta.warns||[]).map(w=>`<div class="warnline">⚠ ${w}</div>`).join("");
+  const p=meta.preview;
+  let html="<thead><tr>"+p.cols.map(c=>`<th>${c}</th>`).join("")+"</tr></thead><tbody>";
+  html+=p.rows.map(r=>"<tr>"+r.map(c=>`<td title="${c.replace(/"/g,'&quot;')}">${c}</td>`).join("")+"</tr>").join("");
+  html+="</tbody>";
+  $("preview").innerHTML=html;
+  $("p-result").classList.remove("hidden");
+  $("p-result").scrollIntoView({behavior:"smooth"});
+}
+
+$("download").addEventListener("click",()=>{
+  if(!resultBytes) return;
+  const blob=new Blob([resultBytes],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=resultName;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+function setStatus(kind,msg){
+  const el=$("status");
+  el.className="status "+kind;
+  el.innerHTML=(kind==="work"?'<span class="spin"></span>':'')+msg;
+}
+function resetAll(){
+  source=null;fileBytes=null;fileName="";resultBytes=null;
+  document.querySelectorAll(".srcbtn").forEach(b=>b.classList.remove("on"));
+  ["p-upload","p-options","p-result"].forEach(id=>$(id).classList.add("hidden"));
+  $("filechip").innerHTML="";$("status").className="";$("status").innerHTML="";
+  $("c-suffix").value="";$("a-suffix").value="";
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+</script>
+</body>
+</html>
