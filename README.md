@@ -21,13 +21,15 @@ To update the tool later, edit `index.html`, commit/push, and Pages redeploys au
 2. **Upload** the manifest `.xlsx`.
 3. **Set options**:
    - Costco: SKU date suffix (e.g. `150826`).
-   - Amazon: supplier, SKU/barcode source (ASIN / LPN / random), shipment, suffix.
+   - Amazon: supplier, SKU source (ASIN / LPN / random), shipment, suffix.
+   - Product tags (optional): type your own, comma-separated, and choose whether they replace or add to the default tags. Leave blank for the defaults.
 4. **Build Hike file**, check the preview and stats, then **Download**.
 5. Import the downloaded file into Hike and map fields (map same-named columns; leave Stock, Handle and blank columns empty).
 
 ## Notes
 
 - **First load** pulls the Python engine (~10 MB) from a CDN; give it a few seconds. After that it's cached.
+- **Amazon barcodes** come from the manifest's UPC column (falls back to EAN, then a random code; the result shows how many fell back).
 - **ASIN mode** groups duplicate items and sums quantity. **LPN mode** keeps every row — only use it when every LPN is filled.
 - The 60-column Hike template is built into the tool, so staff never upload it.
 - If the engine says it failed to load, it's almost always the network — refresh.

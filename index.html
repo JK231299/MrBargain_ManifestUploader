@@ -202,6 +202,17 @@
         <input type="text" id="a-suffix" placeholder="240626" inputmode="numeric">
       </label>
     </div>
+    <label class="fld">
+      <span class="fldname">Product tags <span class="fldhint">— optional, separate with commas. Leave blank to use the default tags</span></span>
+      <input type="text" id="tags" placeholder="e.g. Clearance, Spring Sale">
+    </label>
+    <label class="fld hidden" id="tagmode-wrap">
+      <span class="fldname">Use these tags…</span>
+      <select id="tagmode">
+        <option value="replace">Instead of the default tags</option>
+        <option value="add">As well as the default tags</option>
+      </select>
+    </label>
     <div class="row">
       <button class="btn" id="run" disabled>Build Hike file</button>
       <button class="btn ghost" id="reset">Start over</button>
@@ -238,6 +249,32 @@ def _rand(k=10):
 
 def slugify(n):
     return re.sub(r"-+","-",re.sub(r"[^a-z0-9]+","-",str(n).lower())).strip("-")
+
+def parse_tags(s):
+    seen=set(); tags=[]
+    for t in re.split(r"[;,\n]",s or ""):
+        t=re.sub(r"\s+"," ",t).strip()
+        if t and t not in seen: seen.add(t); tags.append(t)
+    return tags
+
+def apply_custom_tags(default, custom, mode):
+    # custom tags (if any) replace the defaults, or are added after them
+    if not custom: return default
+    if mode=="replace": return list(custom)
+    return default+[t for t in custom if t not in default]
+
+def clean_code(v):
+    if v is None or (isinstance(v,float) and np.isnan(v)): return ""
+    s=str(v).strip()
+    if s.lower() in ("","nan","none"): return ""
+    s=re.sub(r"\.0+$","",s)
+    return s
+
+def clean_upc(v):
+    s=clean_code(v)
+    # Excel drops leading zeros from numeric UPC-A codes
+    if s.isdigit() and len(s)<12: s=s.zfill(12)
+    return s
 
 def finalize(out):
     out["Loyalty"]=0
@@ -339,7 +376,7 @@ def extract_apparel_size(description):
     if re.fullmatch(r"\d+\+",lc): return lc
     return "UNKNOWN"
 
-def build_tags(row,supplier,suffix):
+def build_tags(row,supplier,suffix,custom=None,mode="replace"):
     ptype=product_type_from_gldesc(row["GLDesc"]); desc=row["ItemDesc"]
     tags=[f"{supplier} {suffix}"]
     if ptype in ("Shoes","Clothes"):
@@ -352,7 +389,7 @@ def build_tags(row,supplier,suffix):
     for t in tags:
         t=re.sub(r"\s+"," ",t).strip()
         if t and t not in seen: seen.add(t); clean.append(t)
-    return clean
+    return apply_custom_tags(clean,custom,mode)
 
 def pick_sheet(xls, needed):
     names=xls.sheet_names
@@ -366,7 +403,7 @@ def pick_sheet(xls, needed):
     raise ValueError("Couldn't find a data sheet with the expected columns. Sheets: "+", ".join(names))
 
 # =================== COSTCO ===================
-def run_costco(file_bytes, suffix):
+def run_costco(file_bytes, suffix, custom_tags=None, tag_mode="replace"):
     xls=pd.ExcelFile(io.BytesIO(file_bytes))
     sheet=pick_sheet(xls,{"Item #","Item Description","Quantity","Sell Value"})
     df=pd.read_excel(xls,sheet_name=sheet)
@@ -400,7 +437,8 @@ def run_costco(file_bytes, suffix):
     out["Barcode"]=[bc() for _ in range(len(g))]
     if "Costco Category" in g.columns: out["Product type"]=g["Costco Category"]
     supplier=g["Costco Supplier"].iloc[0] if "Costco Supplier" in g.columns and len(g) else "Costco"
-    out["Product tag"]=(g["Costco Supplier"] if "Costco Supplier" in g.columns else supplier).astype(str)+"; "+suffix
+    sups=g["Costco Supplier"].astype(str) if "Costco Supplier" in g.columns else pd.Series([str(supplier)]*len(g))
+    out["Product tag"]=["; ".join(apply_custom_tags([s,suffix],custom_tags,tag_mode)) for s in sups]
     out["Supplier name"]=supplier
     out["Slug"]=g["Item Description"].apply(slugify)
     out["Cannington Store_Tax"]="GST"
@@ -414,10 +452,13 @@ def run_costco(file_bytes, suffix):
     return final, stats, []
 
 # =================== AMAZON ===================
-def run_amazon(file_bytes, supplier, prefix_choice, shipment, suffix):
+def run_amazon(file_bytes, supplier, prefix_choice, shipment, suffix, custom_tags=None, tag_mode="replace"):
     xls=pd.ExcelFile(io.BytesIO(file_bytes))
     sheet=pick_sheet(xls,{"GLDesc","ItemDesc","Units","MerchandiseCost"})
     df=pd.read_excel(xls,sheet_name=sheet)
+    # codes as text so long numbers don't turn into floats
+    for c in ("UPC","EAN","LPN","Asin"):
+        if c in df.columns: df[c]=df[c].map(clean_code).replace("",np.nan)
     warns=[]
     rows_in=len(df)
 
@@ -459,7 +500,7 @@ def run_amazon(file_bytes, supplier, prefix_choice, shipment, suffix):
     df["SKU"]=prefix.values+"-"+suffix
 
     # tags
-    df["Product tag"]=df.apply(lambda r:";".join(build_tags(r,supplier,suffix)),axis=1)
+    df["Product tag"]=df.apply(lambda r:";".join(build_tags(r,supplier,suffix,custom_tags,tag_mode)),axis=1)
 
     # pricing
     base=df["MerchandiseCost"]*1.10
@@ -472,25 +513,28 @@ def run_amazon(file_bytes, supplier, prefix_choice, shipment, suffix):
     df["Final Cost"]=cost+add
     df["Retail Price"]=df["MerchandiseCost"]*1.10*0.70
 
-    # barcode source
+    # barcode: UPC from the manifest, then EAN, then a random code
     usedbc=set()
-    def bc(v):
-        v="" if pd.isna(v) else str(v).strip()
-        if v and v.lower()!="nan": return v
+    def rand_bc():
         while True:
             b=_rand(12)
             if b not in usedbc: usedbc.add(b); return b
-    if prefix_choice=="LPN" and "LPN" in df.columns:
-        bcs=df["LPN"]
-    elif "EAN" in df.columns:
-        bcs=df["EAN"]
-    else:
-        bcs=pd.Series([None]*len(df))
+    blank=pd.Series([""]*len(df),index=df.index)
+    upc=df["UPC"].map(clean_upc) if "UPC" in df.columns else blank
+    ean=df["EAN"].map(clean_code) if "EAN" in df.columns else blank
+    bcs=upc.where(upc!="",ean)
+    n_ean=int(((upc=="")&(ean!="")).sum())
+    n_rand=int((bcs=="").sum())
+    bcs=bcs.map(lambda v:v if v else rand_bc())
+    if "UPC" not in df.columns:
+        warns.append("No UPC column in this manifest — barcodes use EAN, or a random code where EAN is blank.")
+    elif n_ean or n_rand:
+        warns.append(f"{n_ean+n_rand} of {len(df)} products have no UPC — {n_ean} use EAN, {n_rand} got a random barcode.")
 
     out=pd.DataFrame()
     out["Name"]=df["ItemDesc"]
     out["SKU"]=df["SKU"]
-    out["Barcode"]=bcs.apply(bc)
+    out["Barcode"]=bcs
     out["Product type"]=df["GLDesc"].apply(product_type_from_gldesc)
     out["Product tag"]=df["Product tag"]
     out["Supplier name"]=supplier
@@ -505,6 +549,8 @@ def run_amazon(file_bytes, supplier, prefix_choice, shipment, suffix):
 
     dup=int(final["SKU"].duplicated().sum())
     if dup: warns.append(f"{dup} duplicate SKUs — Hike may reject these. Check the source choice.")
+    dupbc=int(final["Barcode"].duplicated().sum())
+    if dupbc: warns.append(f"{dupbc} products share a barcode with another row (same UPC) — expected in LPN mode, check them otherwise.")
     stats={"Rows in":int(rows_in),"Products out":int(len(final)),"Grouped":int(rows_in-len(final))}
     return final, stats, warns
 
@@ -512,10 +558,12 @@ def run_amazon(file_bytes, supplier, prefix_choice, shipment, suffix):
 def process(source, file_bytes, opts):
     opts=json.loads(opts)
     file_bytes=bytes(file_bytes)
+    tags=parse_tags(opts.get("tags",""))
+    mode=opts.get("tagmode","replace")
     if source=="costco":
-        final,stats,warns=run_costco(file_bytes,opts["suffix"])
+        final,stats,warns=run_costco(file_bytes,opts["suffix"],tags,mode)
     else:
-        final,stats,warns=run_amazon(file_bytes,opts["supplier"],opts["prefix"],opts["shipment"],opts["suffix"])
+        final,stats,warns=run_amazon(file_bytes,opts["supplier"],opts["prefix"],opts["shipment"],opts["suffix"],tags,mode)
     # preview: key cols, first 8 rows
     keycols=["Name","SKU","Barcode","Product type","Product tag","Cannington Store_Cost price","Cannington Store_Retail price","Cannington Store_Stock on hand"]
     prev=final[keycols].head(8).fillna("").astype(str)
@@ -588,6 +636,9 @@ async function loadFile(f){
 $("a-supplier").addEventListener("change",e=>{
   $("a-other-wrap").classList.toggle("hidden",e.target.value!=="__other");
 });
+$("tags").addEventListener("input",e=>{
+  $("tagmode-wrap").classList.toggle("hidden",!e.target.value.trim());
+});
 
 function maybeEnableRun(){
   $("run").disabled=!(ready&&source&&fileBytes);
@@ -599,12 +650,13 @@ $("reset").addEventListener("click",resetAll);
 $("again").addEventListener("click",()=>{$("p-result").classList.add("hidden");window.scrollTo({top:0,behavior:"smooth"});});
 
 function gatherOpts(){
+  const tagOpts={tags:($("tags").value||"").trim(),tagmode:$("tagmode").value};
   if(source==="costco"){
-    return {suffix:($("c-suffix").value||"").trim()};
+    return {suffix:($("c-suffix").value||"").trim(),...tagOpts};
   }
   let sup=$("a-supplier").value;
   if(sup==="__other") sup=($("a-other").value||"").trim()||"Other";
-  return {supplier:sup,prefix:$("a-prefix").value,shipment:$("a-shipment").value,suffix:($("a-suffix").value||"").trim()};
+  return {supplier:sup,prefix:$("a-prefix").value,shipment:$("a-shipment").value,suffix:($("a-suffix").value||"").trim(),...tagOpts};
 }
 
 async function runProcess(){
@@ -667,6 +719,7 @@ function resetAll(){
   ["p-upload","p-options","p-result"].forEach(id=>$(id).classList.add("hidden"));
   $("filechip").innerHTML="";$("status").className="";$("status").innerHTML="";
   $("c-suffix").value="";$("a-suffix").value="";
+  $("tags").value="";$("tagmode").value="replace";$("tagmode-wrap").classList.add("hidden");
   window.scrollTo({top:0,behavior:"smooth"});
 }
 </script>
