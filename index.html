@@ -194,8 +194,12 @@
         </select>
       </label>
       <label class="fld" id="a-ship-wrap">
-        <span class="fldname">Shipment <span class="fldhint">— only affects Melbourne / Sydney cost</span></span>
+        <span class="fldname">Shipment <span class="fldhint">— sets the default shipping cost below</span></span>
         <select id="a-shipment"><option>Container</option><option>Pallets</option></select>
+      </label>
+      <label class="fld">
+        <span class="fldname">Shipping cost per unit ($) <span class="fldhint">— added to every item's cost price. Change it if this load is different</span></span>
+        <input type="text" id="a-shipcost" inputmode="decimal" value="0.00">
       </label>
       <label class="fld">
         <span class="fldname">SKU suffix <span class="fldhint">— added after the code, e.g. 240626</span></span>
@@ -243,6 +247,9 @@ TEMPLATE_COLS = ["Name","Description","SKU","Barcode","Product type","Product ta
 
 BOOL_TRUE = ["Track inventory","Active","Same retail price for all outlets","Cannington Store_Outlet visibility"]
 BOOL_FALSE = ["Visible eCommerce","Enable SEO","Allow out of stock","Is variant product","Enable Serial Number","Component part - not sold individually","Exclude from all discount","Exclude additional loyalty","Age verification needed for buy this product","Enable unit of measure","Is composite product","Exclude from reorder"]
+
+class ManifestError(Exception):
+    """Problem with the uploaded file — shown to staff as-is."""
 
 def _rand(k=10):
     return "".join(random.choices(string.ascii_uppercase+string.digits,k=k))
@@ -452,7 +459,7 @@ def run_costco(file_bytes, suffix, custom_tags=None, tag_mode="replace"):
     return final, stats, []
 
 # =================== AMAZON ===================
-def run_amazon(file_bytes, supplier, prefix_choice, shipment, suffix, custom_tags=None, tag_mode="replace"):
+def run_amazon(file_bytes, supplier, prefix_choice, shipping, suffix, custom_tags=None, tag_mode="replace"):
     xls=pd.ExcelFile(io.BytesIO(file_bytes))
     sheet=pick_sheet(xls,{"GLDesc","ItemDesc","Units","MerchandiseCost"})
     df=pd.read_excel(xls,sheet_name=sheet)
@@ -468,7 +475,7 @@ def run_amazon(file_bytes, supplier, prefix_choice, shipment, suffix, custom_tag
         if nblank:
             warns.append(f"{nblank} of {rows_in} rows have a blank LPN — those get a random code. Use ASIN unless every LPN is filled.")
     else:
-        agg={"RemovalReason":"first","Unnamed: 0":"first","GLDesc":"first","UPC":"first","EAN":"first","FCSku":"first","ItemDesc":"first","Units":"sum","MerchandiseCost":"first","LPN":"first"}
+        agg={"RemovalReason":"first","GLDesc":"first","UPC":"first","EAN":"first","FCSku":"first","ItemDesc":"first","Units":"sum","MerchandiseCost":"first","LPN":"first"}
         agg={k:v for k,v in agg.items() if k in df.columns}
         df=df.groupby("Asin",as_index=False).agg(agg)
 
@@ -503,20 +510,17 @@ def run_amazon(file_bytes, supplier, prefix_choice, shipment, suffix, custom_tag
     df["Product tag"]=df.apply(lambda r:";".join(build_tags(r,supplier,suffix,custom_tags,tag_mode)),axis=1)
 
     # pricing
-    base=df["MerchandiseCost"]*1.10
-    # condition lives in RemovalReason (older manifests: unnamed first column)
-    condcol=next((c for c in ("RemovalReason","Unnamed: 0") if c in df.columns),None)
-    if condcol is None:
-        warns.append("No RemovalReason column found — every item priced at the 24% rate.")
-        cond=pd.Series([""]*len(df),index=df.index)
+    if "RemovalReason" in df.columns:
+        def cost_price(row):
+            if str(row["RemovalReason"]).strip().lower()=="overstock":
+                return row["MerchandiseCost"]*1.10*0.27*1.20
+            else:
+                return row["MerchandiseCost"]*1.10*0.24*1.20
+        cost=df.apply(cost_price,axis=1)
     else:
-        cond=df[condcol].astype(str).str.strip().str.lower()
-    rate=np.where(cond=="overstock",0.27,0.24)
-    cost=base*rate*1.20
-    add=0.0
-    if supplier in ("Amazon Melbourne","Amazon Sydney"):
-        add=1.50 if shipment=="Container" else 2.50
-    df["Final Cost"]=cost+add
+        raise ManifestError("RemovalReason column not found. Please check the uploaded manifest.")
+    # shipping per unit, entered on the website
+    df["Final Cost"]=cost+float(shipping)
     df["Retail Price"]=df["MerchandiseCost"]*1.10*0.70
 
     # barcode: UPC from the manifest, then EAN, then a random code
@@ -569,7 +573,7 @@ def process(source, file_bytes, opts):
     if source=="costco":
         final,stats,warns=run_costco(file_bytes,opts["suffix"],tags,mode)
     else:
-        final,stats,warns=run_amazon(file_bytes,opts["supplier"],opts["prefix"],opts["shipment"],opts["suffix"],tags,mode)
+        final,stats,warns=run_amazon(file_bytes,opts["supplier"],opts["prefix"],opts["shipping"],opts["suffix"],tags,mode)
     # preview: key cols, first 8 rows
     keycols=["Name","SKU","Barcode","Product type","Product tag","Cannington Store_Cost price","Cannington Store_Retail price","Cannington Store_Stock on hand"]
     prev=final[keycols].head(8).fillna("").astype(str)
@@ -639,9 +643,18 @@ async function loadFile(f){
 }
 
 // Amazon option interactivity
+// default shipping per unit; staff can overwrite it
+function defaultShipping(){
+  const sup=$("a-supplier").value;
+  if(sup!=="Amazon Melbourne"&&sup!=="Amazon Sydney") return "0.00";
+  return $("a-shipment").value==="Container"?"1.50":"2.50";
+}
+function fillShipping(){ $("a-shipcost").value=defaultShipping(); }
 $("a-supplier").addEventListener("change",e=>{
   $("a-other-wrap").classList.toggle("hidden",e.target.value!=="__other");
+  fillShipping();
 });
+$("a-shipment").addEventListener("change",fillShipping);
 $("tags").addEventListener("input",e=>{
   $("tagmode-wrap").classList.toggle("hidden",!e.target.value.trim());
 });
@@ -662,12 +675,13 @@ function gatherOpts(){
   }
   let sup=$("a-supplier").value;
   if(sup==="__other") sup=($("a-other").value||"").trim()||"Other";
-  return {supplier:sup,prefix:$("a-prefix").value,shipment:$("a-shipment").value,suffix:($("a-suffix").value||"").trim(),...tagOpts};
+  return {supplier:sup,prefix:$("a-prefix").value,shipping:($("a-shipcost").value||"").trim().replace(/^\$/,""),suffix:($("a-suffix").value||"").trim(),...tagOpts};
 }
 
 async function runProcess(){
   const opts=gatherOpts();
   if(!opts.suffix){ setStatus("fail","Enter a SKU suffix first (the date)."); return; }
+  if(source==="amazon"&&!/^\d+(\.\d+)?$/.test(opts.shipping)){ setStatus("fail","Enter the shipping cost per unit as a number, e.g. 2.50 (use 0 for none)."); return; }
   setStatus("work","Building the Hike file… large manifests take a few seconds.");
   $("run").disabled=true;
   try{
@@ -683,7 +697,10 @@ async function runProcess(){
     showResult(meta);
     setStatus("done","Done — "+meta.stats["Products out"]+" products ready.");
   }catch(e){
-    setStatus("fail","Something went wrong: "+(e.message||e));
+    const msg=String(e.message||e);
+    // manifest problems: show just our message, not the Python traceback
+    const m=msg.match(/ManifestError: (.*)\s*$/);
+    setStatus("fail",m?m[1]:"Something went wrong: "+msg);
   }finally{
     $("run").disabled=false;
   }
@@ -725,6 +742,7 @@ function resetAll(){
   ["p-upload","p-options","p-result"].forEach(id=>$(id).classList.add("hidden"));
   $("filechip").innerHTML="";$("status").className="";$("status").innerHTML="";
   $("c-suffix").value="";$("a-suffix").value="";
+  fillShipping();
   $("tags").value="";$("tagmode").value="replace";$("tagmode-wrap").classList.add("hidden");
   window.scrollTo({top:0,behavior:"smooth"});
 }
