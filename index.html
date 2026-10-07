@@ -193,13 +193,9 @@
           <option value="Randomly generate">Random code — group by ASIN</option>
         </select>
       </label>
-      <label class="fld" id="a-ship-wrap">
-        <span class="fldname">Shipment <span class="fldhint">— sets the default shipping cost below</span></span>
-        <select id="a-shipment"><option>Container</option><option>Pallets</option></select>
-      </label>
       <label class="fld">
-        <span class="fldname">Shipping cost per unit ($) <span class="fldhint">— added to every item's cost price. Change it if this load is different</span></span>
-        <input type="text" id="a-shipcost" inputmode="decimal" value="0.00">
+        <span class="fldname">Shipping cost per unit ($) <span class="fldhint">— added to every item's cost price. Enter 0 if none</span></span>
+        <input type="text" id="a-shipcost" inputmode="decimal" placeholder="e.g. 2.10">
       </label>
       <label class="fld">
         <span class="fldname">SKU suffix <span class="fldhint">— added after the code, e.g. 240626</span></span>
@@ -643,18 +639,9 @@ async function loadFile(f){
 }
 
 // Amazon option interactivity
-// default shipping per unit; staff can overwrite it
-function defaultShipping(){
-  const sup=$("a-supplier").value;
-  if(sup!=="Amazon Melbourne"&&sup!=="Amazon Sydney") return "0.00";
-  return $("a-shipment").value==="Container"?"1.50":"2.50";
-}
-function fillShipping(){ $("a-shipcost").value=defaultShipping(); }
 $("a-supplier").addEventListener("change",e=>{
   $("a-other-wrap").classList.toggle("hidden",e.target.value!=="__other");
-  fillShipping();
 });
-$("a-shipment").addEventListener("change",fillShipping);
 $("tags").addEventListener("input",e=>{
   $("tagmode-wrap").classList.toggle("hidden",!e.target.value.trim());
 });
@@ -681,7 +668,7 @@ function gatherOpts(){
 async function runProcess(){
   const opts=gatherOpts();
   if(!opts.suffix){ setStatus("fail","Enter a SKU suffix first (the date)."); return; }
-  if(source==="amazon"&&!/^\d+(\.\d+)?$/.test(opts.shipping)){ setStatus("fail","Enter the shipping cost per unit as a number, e.g. 2.50 (use 0 for none)."); return; }
+  if(source==="amazon"&&!/^\d+(\.\d+)?$/.test(opts.shipping)){ setStatus("fail","Enter the shipping cost per unit for this load, e.g. 2.10 (enter 0 if none)."); return; }
   setStatus("work","Building the Hike file… large manifests take a few seconds.");
   $("run").disabled=true;
   try{
@@ -742,7 +729,7 @@ function resetAll(){
   ["p-upload","p-options","p-result"].forEach(id=>$(id).classList.add("hidden"));
   $("filechip").innerHTML="";$("status").className="";$("status").innerHTML="";
   $("c-suffix").value="";$("a-suffix").value="";
-  fillShipping();
+  $("a-shipcost").value="";
   $("tags").value="";$("tagmode").value="replace";$("tagmode-wrap").classList.add("hidden");
   window.scrollTo({top:0,behavior:"smooth"});
 }
